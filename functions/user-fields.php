@@ -56,8 +56,11 @@ add_action( 'edit_user_created_user', 'crf_user_register' );
 add_action( 'show_user_profile', 'crf_show_extra_profile_fields' );
 add_action( 'edit_user_profile', 'crf_show_extra_profile_fields' );
 
+$limiteDispo = '';
+
 function crf_show_extra_profile_fields( $user ) {
-	$limiteTotal = get_the_author_meta( 'year_of_birth', $user->ID );
+    
+    $limiteTotal = get_the_author_meta( 'year_of_birth', $user->ID );
 	
 	$orders = wc_get_orders( array(
 		'limit' => -1,
@@ -65,11 +68,19 @@ function crf_show_extra_profile_fields( $user ) {
 	) );
 
 	$compras = 0;
-	foreach ( $orders as $order){
+    
+    foreach ( $orders as $order){
 		$compras += $order->get_total();
-	}
+    }
+    
+    if($limiteTotal > 0){
+        $limiteDispo += $limiteTotal - $compras;
+    } else {
+        $limiteDispo += 0;
+    }
 
-	$limiteDispo = $limiteTotal - $compras;
+
+	
 	?>
 	<h3><?php esc_html_e( 'Pagamentos', 'crf' ); ?></h3>
 
@@ -84,7 +95,7 @@ function crf_show_extra_profile_fields( $user ) {
 		<tr>
 			<th>Limite Disponível</th>
 			<td>
-				<input type="number" disabled="disabled" value="<?php echo $limiteDispo; ?>" />
+				<input id="limituser" type="number" disabled="disabled" value="" />
 			</td>
 		</tr>
 	</table>
@@ -121,7 +132,8 @@ function crf_show_extra_profile_fields( $user ) {
 					<th>Status</th>
 					<th>Total</th>
 				</tr>
-				";
+                ";
+        if($pedidos){
 			foreach ( $pedidos as $pedido){
 				
 				echo "<tr>";
@@ -134,24 +146,120 @@ function crf_show_extra_profile_fields( $user ) {
 					echo "<td>" . return_status($pedido->get_status()) . "</td>";
 					echo "<td>" . $pedido->get_total() . "</td>";
 				echo "</tr>";
-			}
+            }
+        } else {
+            echo "<tr><td colspan='3'>Não há nenhum pedido para este usuário.</td></tr>";
+        }
 		echo "<table>";
 
 	?>
 	<br><hr>
-	<p>Clique para exibir.</p> 
-	<a class="btn" onclick="myFunction()">Clique aqui</a> 
-	<p id="demo"></p> 
-	<script> 
-		function myFunction() { 
+	<h3>Entradas de pagemento</h3>
+	<a class="button" id="entrada">Adicionar Entrada</a> 
+
+	<p id="demo" style="display: none;"><img src="https://laviegourmetemcasa.com.br/wp-content/themes/vegan/images/loading.gif"></p> 
+    <br><br>
+    <table border='0' cellspacing='0' cellpadding='0' class='last-orders'>
+        <tr>
+            <th>Data</th>
+            <th>Valor</th>
+        </tr>
+
+        <?php
+            global $wpdb;
+            $totalEntradas = 0;
+            $results = $wpdb->get_results( "SELECT * FROM lgc_history WHERE id_user = {$_GET['user_id']} ORDER BY data_entrada DESC", OBJECT );
+
+            if($results){
+                    
+                    foreach ( $results as $result){
+
+                        list($date,$hour) = explode(" ", $result->data_entrada);
+					    $arr = explode('-', $date);
+                        $newDate = $arr[2].'/'.$arr[1].'/'.$arr[0];
+                        
+                        echo "<tr>";
+                        echo "<td>{$newDate} {$hour}</td>";
+                        echo "<td>{$result->valor_entrada}</td>";
+                        echo "</tr>";
+
+                        $totalEntradas += $result->valor_entrada;
+                    }
+                
+            } else {
+                echo "<tr><td colspan='2'>Não há nenhuma entradas para este usuário.</td></tr>";
+            }
+
+            $geral = $limiteDispo + $totalEntradas;
+           
+            
+        ?>
+
+        
+
+    </table>
+    
+    <script> 
+    jQuery(document).ready(function($) {
+
+        $('#limituser').val("<?php echo $geral;?>");
+        
+        $('#entrada').click(function() {
+            myFunction();
+            event.preventDefault();
+        });
+
+        function myFunction() { 
 			var x; 
-			var idade = prompt("Digite sua idade:"); 
-				if (idade!=null) { 
-					x="Idade: " + idade + " anos."; 
-					document.getElementById("demo").innerHTML=x; 
-				} 
-		}
+            var valor = prompt("Valor da entrada:"); 
+
+            var user_id = <?php echo $_GET['user_id']; ?>;
+            
+            if (valor!=null) { 
+                //x="valor: " + valor + " anos."; 
+                //document.getElementById("demo").innerHTML=x;
+
+                $.ajax({
+                    url: "/wp-content/plugins/cep-api/entrada.php",
+                    type: 'post',
+                    data: {
+                        id_user: user_id,
+                        entrada: valor,
+                    },
+                    beforeSend: function() {
+                        $("#demo").show();
+                        //alert("Foi");
+                    }
+                })
+                
+                .done(function(msg) {
+                    msg = $.parseJSON(msg);
+                    $("#demo").hide();
+                    //alert(msg);
+                    console.log(msg);
+
+                    if (msg == 'sucesso') {
+                        console.log(msg);
+                        alert('Entrada criada com sucesso!')
+                        location.reload();
+                    } else {                        
+                        console.log(msg['error']);
+                        alert('[01]Ocorreu um erro:' + msg);
+                    }
+
+
+                })
+                .fail(function(jqXHR, textStatus, msg) {
+                    $("#demo").hide();
+                    console.log(msg['error']);
+                        alert('[02]Ocorreu um erro:' + msg);
+                });
+                
+            } 
+        }
+    });
 	</script>
+    <br><br><hr>
 	<?php
 }
 
